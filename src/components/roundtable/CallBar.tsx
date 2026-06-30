@@ -58,6 +58,7 @@ export function CallBar({ roomId, displayName, othersOnCall, onActiveChange }: P
     const connecting = status === 'connecting'
     return (
       <button
+        data-testid="join-call"
         onClick={join}
         disabled={connecting}
         className={cn(
@@ -69,7 +70,10 @@ export function CallBar({ roomId, displayName, othersOnCall, onActiveChange }: P
         {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />}
         <span>{connecting ? 'Connecting…' : status === 'error' ? 'Retry call' : 'Join call'}</span>
         {othersOnCall > 0 && !connecting && (
-          <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500/30 px-1 text-[10px] tabular-nums">
+          <span
+            data-testid="call-others-count"
+            className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500/30 px-1 text-[10px] tabular-nums"
+          >
             {othersOnCall}
           </span>
         )}
@@ -78,7 +82,7 @@ export function CallBar({ roomId, displayName, othersOnCall, onActiveChange }: P
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-2 rounded-full bg-emerald-500/10 py-1 pl-2 pr-1">
+    <div data-testid="call-active" className="flex shrink-0 items-center gap-2 rounded-full bg-emerald-500/10 py-1 pl-2 pr-1">
       <span className="relative flex h-2 w-2 shrink-0">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />

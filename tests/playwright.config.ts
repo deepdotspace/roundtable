@@ -22,6 +22,16 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     headless: true,
+    // Fake mic + auto-accept getUserMedia so the LiveKit voice-call test can
+    // connect real WebRTC headlessly (no physical device, no permission prompt).
+    permissions: ['microphone'],
+    launchOptions: {
+      args: [
+        '--use-fake-device-for-media-stream',
+        '--use-fake-ui-for-media-stream',
+        '--autoplay-policy=no-user-gesture-required',
+      ],
+    },
   },
   webServer: {
     command: `npx vite --port ${PORT} --strictPort --host`,

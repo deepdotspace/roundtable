@@ -58,6 +58,42 @@ test('a reply streams into the shared room for every participant', async ({ user
   }
 })
 
+test('a participant can join the voice call and others see it live', async ({ users }) => {
+  test.setTimeout(90_000)
+  const [host, guest] = await users(['Quill A', 'Quill B'])
+
+  const roomUrl = await createRoom(host, 'E2E Voice Call')
+  await guest.page.goto(roomUrl)
+  await waitRoomLive(host.page)
+  await waitRoomLive(guest.page)
+
+  // The "Join call" control renders in the header for everyone in the room.
+  await expect(host.page.getByTestId('join-call')).toBeVisible({ timeout: 15_000 })
+  await expect(guest.page.getByTestId('join-call')).toBeVisible({ timeout: 15_000 })
+  // Nobody is on the call yet, so no other-participant count badge.
+  await expect(guest.page.getByTestId('call-others-count')).toHaveCount(0)
+
+  // Host joins — this mints a real LiveKit token and connects over WebRTC
+  // (fake mic via launch flags). The header flips to the active call strip.
+  await host.page.getByTestId('join-call').click()
+  await expect(host.page.getByTestId('call-active')).toBeVisible({ timeout: 45_000 })
+
+  // The host's on-call state broadcasts through presence, so the guest — who
+  // has NOT joined — sees the live "1 other on the call" badge.
+  await expect.poll(
+    () => guest.page.getByTestId('call-others-count').textContent(),
+    { timeout: 30_000, intervals: [500] },
+  ).toBe('1')
+
+  // Host leaves; the badge clears for the guest.
+  await host.page.getByTitle('Leave call').click()
+  await expect(host.page.getByTestId('join-call')).toBeVisible({ timeout: 15_000 })
+  await expect.poll(
+    () => guest.page.getByTestId('call-others-count').count(),
+    { timeout: 30_000, intervals: [500] },
+  ).toBe(0)
+})
+
 test('emoji reactions sync live between participants', async ({ users }) => {
   test.setTimeout(90_000)
   const [host, guest] = await users(['Quill A', 'Quill B'])
