@@ -6,6 +6,7 @@ import { ArrowLeft, Check, Link2, MoreHorizontal, Pencil, Eraser } from 'lucide-
 import { MessageItem } from './MessageItem'
 import { PromptBox } from './PromptBox'
 import { PresenceStack, type Peer } from './Presence'
+import { CallBar } from './CallBar'
 import { Cursors } from './Cursors'
 import { ThreadPanel } from './ThreadPanel'
 import { UserMenu } from './UserMenu'
@@ -111,6 +112,13 @@ export function RoomView({ roomId, room }: Props) {
     () => (rawPeers ?? []).filter((p) => (p.state as Peer['state'])?.typing).map((p) => p.userName || 'Someone'),
     [rawPeers],
   )
+
+  // How many *other* people are on the voice call (from broadcast presence).
+  const othersOnCall = useMemo(
+    () => (rawPeers ?? []).filter((p) => p.userId !== myId && (p.state as Peer['state'])?.inCall).length,
+    [rawPeers, myId],
+  )
+  const setInCall = useCallback((inCall: boolean) => updateState({ inCall }), [updateState])
 
   // ---- Autoscroll ----
   const lastMainContent = mainMessages[mainMessages.length - 1]?.data.content
@@ -242,6 +250,12 @@ export function RoomView({ roomId, room }: Props) {
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
+          <CallBar
+            roomId={roomId}
+            displayName={user?.name || user?.email || 'Guest'}
+            othersOnCall={othersOnCall}
+            onActiveChange={setInCall}
+          />
           <PresenceStack peers={peers} hostId={room.data.hostId} currentUserId={myId} onRemove={(id, name) => setRemoveTarget({ id, name })} />
           {isHost && (
             <DropdownMenu>

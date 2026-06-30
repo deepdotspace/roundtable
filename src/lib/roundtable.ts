@@ -1,7 +1,7 @@
 /**
  * Shared types + client helpers for Roundtable.
  */
-import { getAuthToken } from 'deepspace'
+import { getAuthToken, integration } from 'deepspace'
 
 export interface RoomData {
   title: string
@@ -142,4 +142,32 @@ export async function clearRoom(roomId: string): Promise<{ ok: boolean; error?: 
   const res = await authedPost('/api/roundtable/clear', { roomId })
   return res.json().then((j) => j as { ok: boolean; error?: string })
     .catch(() => ({ ok: false, error: 'Request failed' }))
+}
+
+// ---- Voice call (LiveKit) ------------------------------------------------
+
+export interface CallCredentials {
+  token: string
+  url: string
+  roomName: string
+}
+
+/** Stable, namespaced LiveKit room name for a Roundtable. */
+export function callRoomName(roomId: string): string {
+  return `rt-${roomId}`
+}
+
+/**
+ * Mint a LiveKit access token for this room's voice call. Uses the free,
+ * auto-creating `livekit/generate-token` endpoint — the LiveKit room
+ * materializes on first connect and disposes when empty. The calling page is
+ * already auth-gated (`(protected)`), so only signed-in users can mint one.
+ */
+export async function mintCallToken(roomId: string, displayName: string): Promise<CallCredentials | null> {
+  const res = await integration.post<CallCredentials>('livekit/generate-token', {
+    roomName: callRoomName(roomId),
+    displayName,
+  })
+  if (!res?.success || !res.data?.token) return null
+  return res.data
 }

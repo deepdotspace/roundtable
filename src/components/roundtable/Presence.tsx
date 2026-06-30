@@ -8,7 +8,7 @@ export interface Peer {
   userId: string
   userName?: string
   userImageUrl?: string
-  state?: { typing?: boolean; cursor?: { x: number; y: number } }
+  state?: { typing?: boolean; cursor?: { x: number; y: number }; inCall?: boolean }
   isSelf?: boolean
 }
 

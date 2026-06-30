@@ -43,6 +43,7 @@
     "deepspace": "^0.4.3",
     "framer-motion": "^11.15.0",
     "hono": "^4.7.0",
+    "livekit-client": "^2.20.0",
     "lucide-react": "^0.460.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
