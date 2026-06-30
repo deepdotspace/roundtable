@@ -222,7 +222,7 @@ export function registerRoundtableRoutes(app: Hono<AppContext>, resolveAuth: Res
       {
         collection: 'messages',
         data: {
-          parentId, authorId: 'ai', authorName: 'Roundtable AI', authorImage: '',
+          parentId, authorId: 'ai', authorName: 'Assistant', authorImage: '',
           senderKind: 'ai', content: '', status: 'streaming', model: modelId,
         },
       },

@@ -1,13 +1,9 @@
 import { test, expect } from '@playwright/test'
 import { captureConsoleErrors } from './helpers/errors'
 
-/**
- * Wait for the React app to mount. The app shows either:
- * - "Loading..." while auth initializes
- * - The navigation bar once ready
- */
+/** The app shell mounts this once auth resolves. */
 async function waitForApp(page: import('@playwright/test').Page) {
-  await page.waitForSelector('[data-testid="app-navigation"]', { timeout: 15000 })
+  await page.waitForSelector('[data-testid="app-root"]', { timeout: 15000 })
 }
 
 test.describe('Smoke tests', () => {
@@ -15,23 +11,11 @@ test.describe('Smoke tests', () => {
     const errors = captureConsoleErrors(page)
     await page.goto('/')
     await waitForApp(page)
+    await expect(page.getByRole('heading', { name: 'Roundtable', level: 1 })).toBeVisible()
     expect(errors).toEqual([])
   })
 
-  test('navigation is visible', async ({ page }) => {
-    await page.goto('/')
-    await waitForApp(page)
-    await expect(page.getByTestId('app-navigation')).toBeVisible()
-  })
-
-  test('sign-in button visible when logged out', async ({ page }) => {
-    await page.goto('/')
-    await waitForApp(page)
-    await expect(page.getByTestId('nav-sign-in-button')).toBeVisible()
-    await expect(page.getByTestId('nav-user-name')).toHaveCount(0)
-  })
-
-  test('landing shows the Roundtable brand, not scaffold placeholders', async ({ page }) => {
+  test('landing shows the Roundtable brand + sign-in, not scaffold placeholders', async ({ page }) => {
     await page.goto('/')
     await waitForApp(page)
     await expect(page).toHaveTitle(/Roundtable/)

@@ -9,7 +9,6 @@ export type Path =
   | `/api-status`
   | `/home`
   | `/r/:id`
-  | `/settings`
 
 export type Params = {
   '/*': { '*': string }

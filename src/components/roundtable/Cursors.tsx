@@ -1,7 +1,7 @@
 /** Live cursor overlay — renders other participants' pointers inside the chat. */
 import { getUserColor } from 'deepspace'
 import { MousePointer2 } from 'lucide-react'
-import type { Peer } from './ParticipantRail'
+import type { Peer } from './Presence'
 
 export function Cursors({ peers }: { peers: Peer[] }) {
   return (

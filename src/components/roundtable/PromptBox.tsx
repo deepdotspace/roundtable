@@ -1,6 +1,6 @@
-/** The shared prompt composer. Sends a participant message + optionally pings the AI. */
+/** Shared composer. Send posts to the room; Ask posts and the assistant replies. */
 import { useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUp, Sparkles } from 'lucide-react'
+import { ArrowUp, ChevronDown } from 'lucide-react'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../ui'
@@ -49,8 +49,10 @@ export function PromptBox({
     }
   }
 
+  const disabled = busy || !ready || !text.trim()
+
   return (
-    <div className="rounded-2xl border border-border bg-card/80 p-2 shadow-lg backdrop-blur">
+    <div className="rounded-[20px] bg-white/[0.04] p-2 ring-1 ring-white/[0.07] backdrop-blur transition-shadow focus-within:ring-white/[0.14]">
       <textarea
         ref={taRef}
         value={text}
@@ -59,21 +61,20 @@ export function PromptBox({
         onBlur={() => onTyping(false)}
         rows={1}
         disabled={!ready}
-        placeholder={ready ? (placeholder ?? 'Message the roundtable…  (Enter asks the AI, Shift+Enter for newline)') : 'Connecting to the room…'}
-        className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
-        style={{ height: 'auto' }}
+        placeholder={ready ? (placeholder ?? 'Message the room…') : 'Connecting…'}
+        className="max-h-44 min-h-[40px] w-full resize-none bg-transparent px-3 py-2 text-[15px] text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
         onInput={(e) => {
           const el = e.currentTarget
           el.style.height = 'auto'
-          el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+          el.style.height = Math.min(el.scrollHeight, 176) + 'px'
         }}
       />
-      <div className="flex items-center justify-between gap-2 px-1 pb-0.5">
+      <div className="flex items-center justify-between gap-2 pl-1 pr-0.5">
         {showModel ? (
           <Select value={model} onValueChange={setModel}>
-            <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full border-border bg-background/60 px-3 text-xs">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <SelectTrigger className="h-7 w-auto gap-1 rounded-full border-0 bg-white/[0.04] px-2.5 text-xs text-muted-foreground hover:bg-white/[0.07] [&>svg]:hidden">
               <SelectValue />
+              <ChevronDown className="h-3 w-3 opacity-60" />
             </SelectTrigger>
             <SelectContent>
               {MODELS.map((m) => (
@@ -81,25 +82,24 @@ export function PromptBox({
               ))}
             </SelectContent>
           </Select>
-        ) : <span />}
+        ) : <span className="text-[11px] text-muted-foreground/70 pl-1.5">Enter to ask · Shift+Enter for a new line</span>}
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => submit(false)}
-            disabled={busy || !ready || !text.trim()}
-            className="rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
-            title="Post to the room without asking the AI"
+            disabled={disabled}
+            className="rounded-full px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:opacity-40"
+            title="Post to the room without a reply"
           >
-            Just post
+            Send
           </button>
           <button
             onClick={() => submit(true)}
-            disabled={busy || !ready || !text.trim()}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-all hover:opacity-90 disabled:opacity-40',
-            )}
+            disabled={disabled}
+            className={cn('inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-all hover:opacity-90 disabled:opacity-40')}
+            title="Post and get a reply from the assistant"
           >
-            Ask AI
+            Ask
             <ArrowUp className="h-3.5 w-3.5" />
           </button>
         </div>

@@ -1,4 +1,4 @@
-/** Side thread — a branched sub-conversation rooted at one AI message. */
+/** Side thread — a branched sub-conversation rooted at one assistant reply. */
 import { X, GitBranch } from 'lucide-react'
 import { MessageItem } from './MessageItem'
 import { PromptBox } from './PromptBox'
@@ -26,30 +26,28 @@ export function ThreadPanel({
   busy, ready, onClose, onSend, onTyping, onToggleReaction, onDelete,
 }: Props) {
   return (
-    <div className="flex h-full w-full flex-col border-l border-border bg-background/95 backdrop-blur">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+    <div className="flex h-full w-full flex-col bg-background/80 backdrop-blur-xl">
+      <div className="flex items-center gap-2 px-4 py-3">
         <GitBranch className="h-4 w-4 text-primary" />
         <span className="text-sm font-semibold">Side thread</span>
         <button
           onClick={onClose}
-          className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      <div className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {root && (
-          <div className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.04] p-3">
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Branched from
-            </p>
+          <div className="mb-3 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/[0.05]">
+            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Branched from</p>
             <p className="line-clamp-4 text-xs text-muted-foreground">{root.data.content}</p>
           </div>
         )}
         {messages.length === 0 ? (
-          <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-            Explore this tangent without derailing the main line. Ask a follow-up below.
+          <p className="px-2 py-10 text-center text-sm text-muted-foreground">
+            Replies here stay out of the main conversation. Ask a follow-up below.
           </p>
         ) : (
           messages.map((m) => (
@@ -58,7 +56,6 @@ export function ThreadPanel({
               message={m}
               reactions={reactionsFor(m.recordId)}
               currentUserId={currentUserId}
-              canModerate={false}
               onToggleReaction={onToggleReaction}
               onDelete={onDelete}
             />
@@ -66,7 +63,7 @@ export function ThreadPanel({
         )}
       </div>
 
-      <div className="border-t border-border p-3">
+      <div className="p-3">
         <PromptBox
           onSend={onSend}
           onTyping={onTyping}

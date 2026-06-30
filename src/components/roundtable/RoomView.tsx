@@ -2,15 +2,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutations, useUser, usePresenceRoom } from 'deepspace'
-import {
-  ArrowLeft, Sparkles, Trash2, Pencil, Link2, Check, MessageSquarePlus,
-} from 'lucide-react'
+import { ArrowLeft, Check, Link2, MoreHorizontal, Pencil, Eraser } from 'lucide-react'
 import { MessageItem } from './MessageItem'
 import { PromptBox } from './PromptBox'
-import { ParticipantRail, type Peer } from './ParticipantRail'
+import { PresenceStack, type Peer } from './Presence'
 import { Cursors } from './Cursors'
 import { ThreadPanel } from './ThreadPanel'
-import { Button, ConfirmModal, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Input, useToast } from '../ui'
+import { UserMenu } from './UserMenu'
+import {
+  Button, ConfirmModal, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Input, useToast,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '../ui'
 import { cn } from '../ui/utils'
 import {
   askAI, clearRoom, renameRoom, removeParticipant, MAIN_THREAD,
@@ -21,6 +23,8 @@ interface Props {
   roomId: string
   room: Envelope<RoomData>
 }
+
+const GROUP_GAP_MS = 5 * 60 * 1000
 
 export function RoomView({ roomId, room }: Props) {
   const navigate = useNavigate()
@@ -35,7 +39,6 @@ export function RoomView({ roomId, room }: Props) {
   const allMessages = rawMessages as unknown as Envelope<MessageData>[]
   const reactions = rawReactions as unknown as Envelope<ReactionData>[]
 
-  // "Clear room" is a soft timestamp on the room — hide everything up to it.
   const clearedAt = room.data.clearedAt ? new Date(room.data.clearedAt).getTime() : 0
   const messages = useMemo(
     () => (clearedAt ? allMessages.filter((m) => new Date(m.createdAt).getTime() > clearedAt) : allMessages),
@@ -44,7 +47,6 @@ export function RoomView({ roomId, room }: Props) {
 
   const msgMut = useMutations<MessageData>('messages')
   const reactMut = useMutations<ReactionData>('reactions')
-
   const { peers: rawPeers, updateState } = usePresenceRoom(`rt:${roomId}`)
 
   const [model, setModel] = useState('claude-sonnet-4-6')
@@ -66,6 +68,18 @@ export function RoomView({ roomId, room }: Props) {
     () => messages.filter((m) => !m.data.parentId || m.data.parentId === MAIN_THREAD),
     [messages],
   )
+  // Group consecutive messages from the same author (hide the avatar/name then).
+  const rendered = useMemo(() => {
+    return mainMessages.map((m, i) => {
+      const prev = mainMessages[i - 1]
+      const showHeader = !prev
+        || prev.data.authorId !== m.data.authorId
+        || prev.data.senderKind !== m.data.senderKind
+        || new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > GROUP_GAP_MS
+      return { m, showHeader }
+    })
+  }, [mainMessages])
+
   const reactionsByMessage = useMemo(() => {
     const map = new Map<string, Envelope<ReactionData>[]>()
     for (const r of reactions) {
@@ -87,13 +101,9 @@ export function RoomView({ roomId, room }: Props) {
 
   const peers: Peer[] = useMemo(() => {
     const others = (rawPeers ?? []).map((p) => ({
-      userId: p.userId,
-      userName: p.userName,
-      userImageUrl: p.userImageUrl,
-      state: p.state as Peer['state'],
+      userId: p.userId, userName: p.userName, userImageUrl: p.userImageUrl, state: p.state as Peer['state'],
     }))
     const self: Peer = { userId: myId, userName: user?.name, userImageUrl: user?.imageUrl, isSelf: true }
-    // De-dupe in case our own id shows in peers.
     return [self, ...others.filter((o) => o.userId !== myId)]
   }, [rawPeers, myId, user?.name, user?.imageUrl])
 
@@ -102,12 +112,12 @@ export function RoomView({ roomId, room }: Props) {
     [rawPeers],
   )
 
-  // ---- Autoscroll the main line ----
+  // ---- Autoscroll ----
   const lastMainContent = mainMessages[mainMessages.length - 1]?.data.content
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 240
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 280
     if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [mainMessages.length, lastMainContent])
 
@@ -116,24 +126,14 @@ export function RoomView({ roomId, room }: Props) {
     async (text: string, askAi: boolean, parentId: string, setLocalBusy: (b: boolean) => void) => {
       const myName = user?.name || user?.email || 'Guest'
       await msgMut.create({
-        parentId,
-        authorId: myId,
-        authorName: myName,
-        authorImage: user?.imageUrl || '',
-        senderKind: 'participant',
-        content: text,
-        status: 'complete',
-        model: '',
+        parentId, authorId: myId, authorName: myName, authorImage: user?.imageUrl || '',
+        senderKind: 'participant', content: text, status: 'complete', model: '',
       })
       if (askAi) {
         setLocalBusy(true)
         try {
-          // The worker can't reliably read client-written messages back, so we
-          // hand it the conversation context. Include the branch root for threads.
           const inThread = (m: Envelope<MessageData>) =>
-            parentId === MAIN_THREAD
-              ? (!m.data.parentId || m.data.parentId === MAIN_THREAD)
-              : m.data.parentId === parentId
+            parentId === MAIN_THREAD ? (!m.data.parentId || m.data.parentId === MAIN_THREAD) : m.data.parentId === parentId
           const history: AskHistoryTurn[] = messages
             .filter(inThread)
             .filter((m) => m.data.status !== 'streaming' && (m.data.content || '').trim() !== '')
@@ -145,13 +145,13 @@ export function RoomView({ roomId, room }: Props) {
             }))
           if (parentId !== MAIN_THREAD) {
             const root = messages.find((m) => m.recordId === parentId)
-            if (root) history.unshift({ senderKind: 'ai', authorName: 'Roundtable AI', content: root.data.content })
+            if (root) history.unshift({ senderKind: 'ai', authorName: 'Assistant', content: root.data.content })
           }
           history.push({ senderKind: 'participant', authorName: myName, content: text })
           const res = await askAI({ roomId, parentId, modelId: model, history })
-          if (!res.ok) toastError('AI error', res.error || 'Could not reach the assistant')
+          if (!res.ok) toastError("Couldn't get a reply", res.error || 'Please try again.')
         } catch {
-          toastError('AI error', 'Could not reach the assistant')
+          toastError("Couldn't get a reply", 'Please try again.')
         } finally {
           setLocalBusy(false)
         }
@@ -167,15 +167,12 @@ export function RoomView({ roomId, room }: Props) {
   // ---- Reactions ----
   const toggleReaction = useCallback(
     (messageId: string, emoji: string) => {
-      const mine = reactions.find(
-        (r) => r.data.messageId === messageId && r.data.emoji === emoji && r.data.userId === myId,
-      )
+      const mine = reactions.find((r) => r.data.messageId === messageId && r.data.emoji === emoji && r.data.userId === myId)
       if (mine) reactMut.remove(mine.recordId)
       else reactMut.create({ messageId, emoji, userId: myId, userName: user?.name || 'Guest' })
     },
     [reactions, myId, reactMut, user?.name],
   )
-
   const deleteMessage = useCallback((id: string) => msgMut.remove(id), [msgMut])
 
   // ---- Presence: cursor + typing ----
@@ -194,22 +191,22 @@ export function RoomView({ roomId, room }: Props) {
   const doClear = async () => {
     setConfirmClear(false)
     const res = await clearRoom(roomId)
-    if (res.ok) success('Room cleared')
-    else toastError('Could not clear', res.error)
+    if (res.ok) success('Conversation cleared')
+    else toastError("Couldn't clear", res.error)
   }
   const doRename = async () => {
     const t = renameValue.trim()
     if (!t) return
     setRenameOpen(false)
     if (await renameRoom(roomId, t)) success('Renamed')
-    else toastError('Could not rename')
+    else toastError("Couldn't rename")
   }
   const doRemove = async () => {
     if (!removeTarget) return
     const target = removeTarget
     setRemoveTarget(null)
     if (await removeParticipant(roomId, target.id)) success(`Removed ${target.name}`)
-    else toastError('Could not remove')
+    else toastError("Couldn't remove")
   }
   const copyLink = () => {
     navigator.clipboard?.writeText(window.location.href).catch(() => {})
@@ -218,59 +215,57 @@ export function RoomView({ roomId, room }: Props) {
   }
 
   const activeThread = activeThreadId
-    ? {
-        root: messages.find((m) => m.recordId === activeThreadId),
-        list: messages.filter((m) => m.data.parentId === activeThreadId),
-      }
+    ? { root: messages.find((m) => m.recordId === activeThreadId), list: messages.filter((m) => m.data.parentId === activeThreadId) }
     : null
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       {/* Header */}
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
+      <header className="z-20 flex shrink-0 items-center gap-3 border-b border-white/[0.06] bg-background/70 px-3 py-2.5 backdrop-blur-xl sm:px-4">
         <button
           onClick={() => navigate('/home')}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
-          title="Back to roundtables"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+          title="Leave room"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <div className="min-w-0">
-          <h1 className="flex items-center gap-2 truncate text-sm font-semibold text-foreground">
-            {room.data.title}
-            {isHost && (
-              <button
-                onClick={() => { setRenameValue(room.data.title); setRenameOpen(true) }}
-                className="text-muted-foreground hover:text-foreground"
-                title="Rename"
-              >
-                <Pencil className="h-3 w-3" />
-              </button>
-            )}
-          </h1>
-          {room.data.topic && <p className="truncate text-[11px] text-muted-foreground">{room.data.topic}</p>}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <h1 className="truncate text-sm font-semibold text-foreground">{room.data.title}</h1>
           <button
             onClick={copyLink}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground"
             title="Copy invite link"
           >
-            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Link2 className="h-3.5 w-3.5" />}
+            {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Link2 className="h-3 w-3" />}
             <span className="font-mono tracking-wider">{room.data.code}</span>
           </button>
+        </div>
+
+        <div className="ml-auto flex items-center gap-1.5">
+          <PresenceStack peers={peers} hostId={room.data.hostId} currentUserId={myId} onRemove={(id, name) => setRemoveTarget({ id, name })} />
           {isHost && (
-            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setConfirmClear(true)}>
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-white/[0.06] hover:text-foreground" title="Room settings">
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={() => { setRenameValue(room.data.title); setRenameOpen(true) }} className="gap-2">
+                  <Pencil className="h-3.5 w-3.5" /> Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setConfirmClear(true)} className="gap-2 text-muted-foreground">
+                  <Eraser className="h-3.5 w-3.5" /> Clear conversation
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
+          <div className="ml-1"><UserMenu /></div>
         </div>
       </header>
 
       {/* Body */}
-      <div className="flex min-h-0 flex-1">
-        {/* Chat column */}
+      <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <div
             ref={(el) => { scrollRef.current = el; chatAreaRef.current = el }}
@@ -279,17 +274,17 @@ export function RoomView({ roomId, room }: Props) {
             className="relative flex-1 overflow-y-auto"
           >
             <Cursors peers={peers.filter((p) => !p.isSelf)} />
-            <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
-              {mainMessages.length === 0 ? (
+            <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+              {rendered.length === 0 ? (
                 <EmptyRoom />
               ) : (
-                mainMessages.map((m) => (
+                rendered.map(({ m, showHeader }) => (
                   <MessageItem
                     key={m.recordId}
                     message={m}
                     reactions={reactionsFor(m.recordId)}
                     currentUserId={myId}
-                    canModerate={false}
+                    showHeader={showHeader}
                     threadCount={threadCounts.get(m.recordId) ?? 0}
                     onToggleReaction={toggleReaction}
                     onBranch={(id) => setActiveThreadId(id)}
@@ -302,14 +297,20 @@ export function RoomView({ roomId, room }: Props) {
           </div>
 
           {/* Composer */}
-          <div className="shrink-0 px-4 pb-4">
+          <div className="shrink-0 px-4 pb-4 sm:px-6">
             <div className="mx-auto max-w-3xl">
-              <div className="mb-1.5 h-4 px-2 text-xs text-primary">
+              <div className="mb-1.5 flex h-4 items-center gap-1.5 px-2 text-xs text-primary">
                 {typingNames.length > 0 && (
-                  <span>
-                    {typingNames.slice(0, 3).join(', ')}
-                    {typingNames.length > 3 ? ' and others' : ''} {typingNames.length === 1 ? 'is' : 'are'} typing…
-                  </span>
+                  <>
+                    <span className="flex gap-0.5">
+                      <i className="h-1 w-1 animate-bounce rounded-full bg-primary" style={{ animationDelay: '0ms' }} />
+                      <i className="h-1 w-1 animate-bounce rounded-full bg-primary" style={{ animationDelay: '150ms' }} />
+                      <i className="h-1 w-1 animate-bounce rounded-full bg-primary" style={{ animationDelay: '300ms' }} />
+                    </span>
+                    <span className="text-muted-foreground">
+                      {typingNames.slice(0, 3).join(', ')}{typingNames.length > 3 ? ' and others' : ''} {typingNames.length === 1 ? 'is' : 'are'} typing
+                    </span>
+                  </>
                 )}
               </div>
               <PromptBox onSend={handleSendMain} onTyping={setTyping} model={model} setModel={setModel} busy={busy} ready={roomReady} />
@@ -317,20 +318,9 @@ export function RoomView({ roomId, room }: Props) {
           </div>
         </div>
 
-        {/* Participant rail */}
-        <aside className="hidden w-64 shrink-0 border-l border-border bg-card/30 md:block">
-          <ParticipantRail
-            peers={peers}
-            hostId={room.data.hostId}
-            hostName={room.data.hostName}
-            currentUserId={myId}
-            onRemove={(id, name) => setRemoveTarget({ id, name })}
-          />
-        </aside>
-
         {/* Thread slide-over */}
         {activeThread && (
-          <aside className="absolute inset-y-0 right-0 z-30 w-full max-w-md shadow-2xl md:relative md:w-96 md:shadow-none">
+          <aside className="absolute inset-y-0 right-0 z-30 w-full border-l border-white/[0.06] bg-background shadow-2xl sm:max-w-md md:relative md:w-[26rem] md:shadow-none">
             <ThreadPanel
               rootId={activeThreadId!}
               root={activeThread.root}
@@ -357,8 +347,8 @@ export function RoomView({ roomId, room }: Props) {
         onClose={() => setConfirmClear(false)}
         onConfirm={doClear}
         title={`Clear "${room.data.title}"?`}
-        description="This permanently deletes every message in the room for all participants."
-        confirmText="Clear room"
+        description="This hides every message in the room for everyone. It can't be undone."
+        confirmText="Clear"
         variant="destructive"
       />
       <ConfirmModal
@@ -366,21 +356,14 @@ export function RoomView({ roomId, room }: Props) {
         onClose={() => setRemoveTarget(null)}
         onConfirm={doRemove}
         title={`Remove ${removeTarget?.name}?`}
-        description="They'll lose access to this roundtable. They can rejoin only if you share the link again."
+        description="They'll lose access to this room. They can rejoin only with the link again."
         confirmText="Remove"
         variant="destructive"
       />
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename roundtable</DialogTitle>
-          </DialogHeader>
-          <Input
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && doRename()}
-            autoFocus
-          />
+          <DialogHeader><DialogTitle>Rename room</DialogTitle></DialogHeader>
+          <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doRename()} autoFocus />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRenameOpen(false)}>Cancel</Button>
             <Button onClick={doRename}>Save</Button>
@@ -393,18 +376,12 @@ export function RoomView({ roomId, room }: Props) {
 
 function EmptyRoom() {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-inset ring-primary/30">
-        <Sparkles className="h-6 w-6" />
-      </div>
-      <h2 className="text-base font-semibold text-foreground">The table is set</h2>
-      <p className="max-w-sm text-sm text-muted-foreground">
-        Everyone here shares one AI and one conversation. Ask the first question — your whole
-        group will watch the answer stream in live.
-      </p>
-      <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <MessageSquarePlus className="h-3.5 w-3.5" />
-        Tip: branch any AI reply into a side thread to explore tangents.
+    <div className="flex flex-col items-center justify-center gap-2 py-24 text-center">
+      <h2 className="text-lg font-semibold text-foreground">Start the conversation</h2>
+      <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+        Everyone here shares one conversation. Type a question and hit{' '}
+        <span className="font-medium text-foreground">Ask</span> — the reply appears for the whole
+        room as it's written.
       </p>
     </div>
   )
