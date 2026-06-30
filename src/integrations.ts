@@ -17,5 +17,11 @@
 
 export const integrations: Record<string, { billing: 'developer' | 'user' }> = {
   google: { billing: 'user' },
+  // LiveKit must be 'user' so each participant's OWN JWT subject becomes their
+  // LiveKit identity. Under 'developer' billing the api-worker forwards the app
+  // owner's JWT for every caller, so all participants share one identity —
+  // and LiveKit allows only one connection per identity, so each new joiner
+  // evicts the previous one. The token mint itself is free (baseCost 0).
+  livekit: { billing: 'user' },
   // openai: { billing: 'developer' },
 }

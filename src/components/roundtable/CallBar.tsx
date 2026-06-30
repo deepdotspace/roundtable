@@ -24,7 +24,7 @@ interface Props {
 
 function CallAvatar({ p }: { p: CallParticipant }) {
   return (
-    <div className="relative" title={p.isLocal ? `${p.name} (you)` : p.name}>
+    <div data-testid="call-participant" className="relative" title={p.isLocal ? `${p.name} (you)` : p.name}>
       <span
         className={cn(
           'flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ring-2 transition-shadow',

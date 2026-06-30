@@ -13,21 +13,15 @@ test.describe('API tests', () => {
     // If the app loaded and connected, the WS endpoint works
   })
 
-  // Locks the LiveKit voice-call contract: endpoint name + the exact response
-  // shape the call UI consumes (token / wss url / roomName). `generate-token`
-  // is free (developer-billed, baseCost 0), so this is one safe call per run.
-  test('livekit token endpoint returns a join token + wss url', async ({ request }) => {
-    const roomName = `__test-${Date.now()}__call`
+  // The LiveKit token mint is billed per-user (so each caller's own JWT subject
+  // becomes their LiveKit identity — see src/integrations.ts). That means the
+  // api-worker rejects anonymous callers: the call surface must be signed in.
+  // The authenticated success path (real token + two users joining without
+  // eviction) is covered end-to-end in roundtable.spec.ts.
+  test('livekit token mint requires authentication (per-user billing)', async ({ request }) => {
     const res = await request.post('/api/integrations/livekit/generate-token', {
-      data: { roomName, displayName: 'Test User' },
+      data: { roomName: `__test-${Date.now()}__call`, displayName: 'Anon' },
     })
-    expect(res.ok()).toBeTruthy()
-
-    const body = (await res.json()) as { success: boolean; data?: { token?: string; url?: string; roomName?: string } }
-    expect(body.success).toBe(true)
-    expect(typeof body.data?.token).toBe('string')
-    expect(body.data?.token?.length ?? 0).toBeGreaterThan(20)
-    expect(body.data?.url).toMatch(/^wss:\/\/.+\.livekit\.cloud/)
-    expect(body.data?.roomName).toBe(roomName)
+    expect(res.status()).toBe(401)
   })
 })

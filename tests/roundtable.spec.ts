@@ -85,13 +85,33 @@ test('a participant can join the voice call and others see it live', async ({ us
     { timeout: 30_000, intervals: [500] },
   ).toBe('1')
 
-  // Host leaves; the badge clears for the guest.
+  // Guest joins too. Both must stay on the call — this guards the regression
+  // where a shared LiveKit identity made the second joiner evict the first.
+  await guest.page.getByTestId('join-call').click()
+  await expect(guest.page.getByTestId('call-active')).toBeVisible({ timeout: 45_000 })
+
+  // Each side sees BOTH participants (self + the other), and crucially the host
+  // is NOT evicted: its call strip stays up and shows two avatars.
+  await expect.poll(
+    () => host.page.getByTestId('call-participant').count(),
+    { timeout: 30_000, intervals: [500] },
+  ).toBe(2)
+  await expect.poll(
+    () => guest.page.getByTestId('call-participant').count(),
+    { timeout: 30_000, intervals: [500] },
+  ).toBe(2)
+  // The host never fell back to the "Join call" button (i.e. wasn't kicked).
+  await expect(host.page.getByTestId('call-active')).toBeVisible()
+  await expect(host.page.getByTestId('join-call')).toHaveCount(0)
+
+  // Host leaves; the guest is left alone on the call (one avatar) and still in it.
   await host.page.getByTitle('Leave call').click()
   await expect(host.page.getByTestId('join-call')).toBeVisible({ timeout: 15_000 })
   await expect.poll(
-    () => guest.page.getByTestId('call-others-count').count(),
+    () => guest.page.getByTestId('call-participant').count(),
     { timeout: 30_000, intervals: [500] },
-  ).toBe(0)
+  ).toBe(1)
+  await expect(guest.page.getByTestId('call-active')).toBeVisible()
 })
 
 test('emoji reactions sync live between participants', async ({ users }) => {
