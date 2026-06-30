@@ -1,0 +1,10 @@
+node_modules
+dist
+.wrangler
+.dev.vars
+.deepspace
+.worker-bundle.js
+*.tgz
+
+# local preview config
+.claude/
