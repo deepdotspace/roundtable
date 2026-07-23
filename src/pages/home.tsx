@@ -21,9 +21,7 @@ export default function HomePage() {
 function Wordmark() {
   return (
     <div className="flex items-center gap-2">
-      <span className="relative flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 ring-1 ring-inset ring-primary/30">
-        <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_var(--color-primary)]" />
-      </span>
+      <img src="/favicon.svg" alt="" aria-hidden className="h-6 w-6 shrink-0 rounded-[5px]" />
       <span className="font-serif text-lg font-semibold tracking-tight text-foreground">Roundtable</span>
     </div>
   )
